@@ -61,13 +61,12 @@ export default function DashboardPage() {
     } catch { toast.error('Invalid JSON configuration'); }
   }
 
-  const apps = data?.data?.data || []; // ← fix 2: correct response shape
+  const apps = data?.data?.data || [];
 
   if (authLoading) return <div className="min-h-screen flex items-center justify-center"><Loader size={24} className="animate-spin text-indigo-500" /></div>;
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      {/* Top nav */}
       <header className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -84,7 +83,6 @@ export default function DashboardPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Hero */}
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Your Apps</h1>
@@ -95,7 +93,6 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Apps grid */}
         {isLoading ? (
           <div className="flex items-center justify-center py-20"><Loader size={24} className="animate-spin text-indigo-500" /></div>
         ) : apps.length === 0 ? (
@@ -128,7 +125,7 @@ export default function DashboardPage() {
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{app.name}</h3>
                 <p className="text-xs text-gray-400 mb-3">{app.config?.entities?.length || 0} entities · Created {formatDate(app.created_at)}</p>
                 <div className="flex gap-2">
-                  <Link href={`/apps/${app.id}/page/default`} className="btn-primary text-xs py-1.5 flex-1 justify-center">
+                  <Link href={`/apps/${app.id}/page/${app.config?.pages?.[0]?.id || 'home'}`} className="btn-primary text-xs py-1.5 flex-1 justify-center">
                     <Eye size={12} /> Open App
                   </Link>
                   <Link href={`/apps/${app.id}/settings`} className="btn-secondary text-xs py-1.5 px-3">
@@ -141,7 +138,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* Create App Modal */}
       {createOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-up">

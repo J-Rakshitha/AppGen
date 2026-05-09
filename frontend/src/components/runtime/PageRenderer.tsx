@@ -28,22 +28,17 @@ function UnknownComponent({ type }: { type: string }) {
 function ComponentRenderer({ appId, component, appConfig }: { appId: string; component: any; appConfig: any }) {
   const entity = component.entity;
   const entityConfig = entity ? getEntityConfig(appConfig, entity) : null;
-
   switch (component.type) {
     case 'table':
       if (!entity) return <div className="card p-4 text-sm text-gray-400">Table: no entity specified</div>;
       return <DynamicTable appId={appId} component={component} entityConfig={entityConfig || { name: entity, fields: [] }} />;
-
     case 'form':
       if (!entity) return <div className="card p-4 text-sm text-gray-400">Form: no entity specified</div>;
       return <DynamicTable appId={appId} component={{ ...component, type: 'table' }} entityConfig={entityConfig || { name: entity, fields: [] }} />;
-
     case 'dashboard':
       return <DashboardStats appId={appId} entities={appConfig?.entities || []} />;
-
     case 'stats':
       return <DashboardStats appId={appId} entities={appConfig?.entities || []} />;
-
     case 'card':
       return (
         <div className="card p-5">
@@ -51,11 +46,9 @@ function ComponentRenderer({ appId, component, appConfig }: { appId: string; com
           <p className="text-sm text-gray-500">{component.props?.content || 'No content configured.'}</p>
         </div>
       );
-
     case 'list':
       if (!entity) return <div className="card p-4 text-sm text-gray-400">List: no entity specified</div>;
       return <DynamicTable appId={appId} component={{ ...component, type: 'table' }} entityConfig={entityConfig || { name: entity, fields: [] }} />;
-
     default:
       return <UnknownComponent type={component.type} />;
   }
@@ -70,18 +63,38 @@ export function PageRenderer({ appId, page, appConfig }: Props) {
     );
   }
 
-  const components: any[] = page.components || [];
+  // Support both 'components' and 'sections' keys from backend
+  let components: any[] = page.components || [];
+
+  // If no components, build from sections
+  if (components.length === 0 && page.sections?.length > 0) {
+    components = page.sections.map((s: any, i: number) => ({
+      id: `section-${i}`,
+      type: s.type || 'table',
+      entity: s.entity,
+      title: s.label || s.entity,
+    }));
+  }
+
+  // If still no components, auto-render all entities as tables
+  if (components.length === 0 && appConfig?.entities?.length > 0) {
+    components = appConfig.entities.map((e: any) => ({
+      id: `auto-${e.name}`,
+      type: 'table',
+      entity: e.name,
+      title: e.label || e.name,
+    }));
+  }
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">{page.title}</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">{page.label || page.title}</h1>
       </div>
-
       {components.length === 0 ? (
         <div className="card p-12 text-center border-dashed border-2">
           <p className="text-gray-400 text-sm">No components on this page.</p>
-          <p className="text-gray-300 text-xs mt-1">Add components to the page config to display content here.</p>
+          <p className="text-gray-300 text-xs mt-1">Add entities to your app config to display content here.</p>
         </div>
       ) : (
         <div className="space-y-6">

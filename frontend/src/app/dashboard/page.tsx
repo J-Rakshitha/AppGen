@@ -34,7 +34,9 @@ export default function DashboardPage() {
       qc.invalidateQueries({ queryKey: ['apps'] });
       toast.success('App created!');
       setCreateOpen(false);
-      router.push(`/apps/${r.data.data.id}/page/default`); // ← fix 1: correct route
+      const app = r.data.data;
+      const firstPageId = app.config?.pages?.[0]?.id || 'home';
+      router.push(`/apps/${app.id}/page/${firstPageId}`);
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });

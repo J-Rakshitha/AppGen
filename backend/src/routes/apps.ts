@@ -7,7 +7,7 @@ const router = Router();
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const result = await pool.query(
-      `SELECT id, name, description, status, created_at, updated_at
+      `SELECT id, name, description, config, status, created_at, updated_at
        FROM apps WHERE user_id = $1 AND status != 'archived' ORDER BY updated_at DESC`,
       [req.user!.userId]
     );
@@ -25,11 +25,27 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
     }
     const appConfig = config || req.body;
     const appName = name || appConfig.name || 'Untitled App';
+
+    // Auto-generate pages from entities if none exist
+    const entities = appConfig.entities || [];
+    const pages = appConfig.pages && appConfig.pages.length > 0
+      ? appConfig.pages
+      : entities.length > 0
+        ? entities.map((entity: any, i: number) => ({
+            id: entity.name,
+            label: entity.label || entity.name,
+            icon: '📋',
+            sections: [{ type: 'table', entity: entity.name }],
+          }))
+        : [{ id: 'home', label: 'Home', icon: '🏠', sections: [] }];
+
+    const finalConfig = { ...appConfig, pages };
+
     const result = await pool.query(
       `INSERT INTO apps (user_id, name, description, config, status)
        VALUES ($1, $2, $3, $4, 'active')
-       RETURNING id, name, description, status, created_at, updated_at`,
-      [req.user!.userId, appName, description || '', JSON.stringify(appConfig)]
+       RETURNING id, name, description, config, status, created_at, updated_at`,
+      [req.user!.userId, appName, description || '', JSON.stringify(finalConfig)]
     );
     res.status(201).json({ success: true, data: result.rows[0] });
   } catch (err) {
@@ -60,7 +76,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     const result = await pool.query(
       `UPDATE apps SET name = $1, description = $2, config = $3, updated_at = NOW()
        WHERE id = $4 AND user_id = $5
-       RETURNING id, name, description, status, created_at, updated_at`,
+       RETURNING id, name, description, config, status, created_at, updated_at`,
       [name, description || '', JSON.stringify(config), req.params.id, req.user!.userId]
     );
     if (!result.rows[0]) {

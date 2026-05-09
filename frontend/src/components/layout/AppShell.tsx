@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
-import { LayoutDashboard, Settings, LogOut, Bell, ChevronRight, Zap, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Settings, LogOut, ChevronRight, Zap, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 
 interface NavItem { href: string; label: string; icon: React.ReactNode; }
@@ -12,7 +12,7 @@ export function AppShell({ children, appId, appName, pages }: {
   children: React.ReactNode;
   appId?: string;
   appName?: string;
-  pages?: { id: string; title: string; icon?: string }[];
+  pages?: { id: string; label?: string; title?: string; icon?: string }[];
 }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
@@ -20,7 +20,7 @@ export function AppShell({ children, appId, appName, pages }: {
 
   const navItems: NavItem[] = appId && pages ? pages.map(p => ({
     href: `/apps/${appId}/page/${p.id}`,
-    label: p.title,
+    label: p.label || p.title || p.id,
     icon: <span className="text-base">{p.icon || '📋'}</span>,
   })) : [
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
@@ -32,7 +32,6 @@ export function AppShell({ children, appId, appName, pages }: {
       'fixed inset-y-0 left-0 z-50 lg:relative lg:translate-x-0 transition-transform duration-300',
       sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
     )}>
-      {/* Logo */}
       <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-800">
         <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
           <Zap size={16} className="text-white" />
@@ -46,7 +45,6 @@ export function AppShell({ children, appId, appName, pages }: {
         </button>
       </div>
 
-      {/* Back to dashboard */}
       {appId && (
         <div className="px-2 py-2 border-b border-gray-800">
           <Link href="/dashboard" className="flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors">
@@ -55,7 +53,6 @@ export function AppShell({ children, appId, appName, pages }: {
         </div>
       )}
 
-      {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
         {navItems.map(item => (
           <Link key={item.href} href={item.href}
@@ -67,7 +64,6 @@ export function AppShell({ children, appId, appName, pages }: {
         ))}
       </nav>
 
-      {/* Footer */}
       <div className="px-2 py-3 border-t border-gray-800 space-y-1">
         {appId && (
           <Link href={`/apps/${appId}/settings`}
@@ -86,11 +82,8 @@ export function AppShell({ children, appId, appName, pages }: {
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 dark:bg-gray-950">
       {sidebar}
-      {/* Overlay */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
-
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
         <header className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 lg:hidden">
           <button onClick={() => setSidebarOpen(true)} className="text-gray-500">
             <Menu size={20} />

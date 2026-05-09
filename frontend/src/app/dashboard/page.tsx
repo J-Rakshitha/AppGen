@@ -34,7 +34,7 @@ export default function DashboardPage() {
       qc.invalidateQueries({ queryKey: ['apps'] });
       toast.success('App created!');
       setCreateOpen(false);
-      router.push(`/apps/${r.data.data.id}`);
+      router.push(`/apps/${r.data.data.id}/page/default`); // ← fix 1: correct route
     },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
@@ -59,7 +59,7 @@ export default function DashboardPage() {
     } catch { toast.error('Invalid JSON configuration'); }
   }
 
-  const apps = data?.data?.apps || [];
+  const apps = data?.data?.data || []; // ← fix 2: correct response shape
 
   if (authLoading) return <div className="min-h-screen flex items-center justify-center"><Loader size={24} className="animate-spin text-indigo-500" /></div>;
 
@@ -126,7 +126,7 @@ export default function DashboardPage() {
                 <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{app.name}</h3>
                 <p className="text-xs text-gray-400 mb-3">{app.config?.entities?.length || 0} entities · Created {formatDate(app.created_at)}</p>
                 <div className="flex gap-2">
-                  <Link href={`/apps/${app.id}`} className="btn-primary text-xs py-1.5 flex-1 justify-center">
+                  <Link href={`/apps/${app.id}/page/default`} className="btn-primary text-xs py-1.5 flex-1 justify-center">
                     <Eye size={12} /> Open App
                   </Link>
                   <Link href={`/apps/${app.id}/settings`} className="btn-secondary text-xs py-1.5 px-3">

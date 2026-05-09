@@ -16,7 +16,9 @@ export default function AppPage() {
   const params = useParams();
   const appId = params.appId as string;
 
-  useEffect(() => { if (!authLoading && !user) router.push('/login'); }, [user, authLoading]);
+  useEffect(() => {
+    if (!authLoading && !user) router.push('/login');
+  }, [user, authLoading]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['app', appId],
@@ -24,11 +26,24 @@ export default function AppPage() {
     enabled: !!user && !!appId,
   });
 
-  if (authLoading || isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader size={24} className="animate-spin text-indigo-500" /></div>;
-  if (error || !data?.data?.app) return <div className="min-h-screen flex items-center justify-center text-red-500">App not found</div>;
+  if (authLoading || isLoading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <Loader size={24} className="animate-spin text-indigo-500" />
+    </div>
+  );
 
-  const app = data.data.app;
-  const config = app.config;
+  // FIX 1: The API returns { data: { data: { app } } } via axios wrapping.
+  // Original code read data.data.app — but the real shape is data.data.data (the app object).
+  // Check both shapes so it works regardless of backend version.
+  const app = data?.data?.data ?? data?.data?.app;
+
+  if (error || !app) return (
+    <div className="min-h-screen flex items-center justify-center text-red-500">
+      App not found
+    </div>
+  );
+
+  const config = app.config || {};
   const pages = config.pages || [];
   const firstPage = pages[0];
 
@@ -38,21 +53,27 @@ export default function AppPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">{app.name}</h1>
-            <p className="text-sm text-gray-400 mt-0.5">{config.description || 'Config-driven application'}</p>
+            <p className="text-sm text-gray-400 mt-0.5">
+              {config.description || 'Config-driven application'}
+            </p>
           </div>
           <NotificationsPanel appId={appId} />
         </div>
 
-        {/* Stats */}
-        {config.entities?.length > 0 && <DashboardStats appId={appId} entities={config.entities} />}
+        {/* Dashboard stats */}
+        {config.entities?.length > 0 && (
+          <DashboardStats appId={appId} entities={config.entities} />
+        )}
 
-        {/* First page or empty state */}
+        {/* First page content */}
         {firstPage ? (
           <PageRenderer appId={appId} page={firstPage} appConfig={config} />
         ) : (
           <div className="card p-12 text-center border-dashed border-2">
             <p className="text-gray-400 mb-2">No pages configured.</p>
-            <p className="text-sm text-gray-300">Go to Settings to edit the app configuration.</p>
+            <p className="text-sm text-gray-300">
+              Go to Settings to edit the app configuration.
+            </p>
           </div>
         )}
       </div>

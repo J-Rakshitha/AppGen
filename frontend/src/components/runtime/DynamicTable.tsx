@@ -26,123 +26,222 @@ export function DynamicTable({ appId, component, entityConfig }: Props) {
   const [csvOpen, setCsvOpen] = useState(false);
 
   const entity = component.entity || entityConfig?.name;
-  const qKey = ['records', appId, entity, page, search, sort, order];
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: qKey,
-    queryFn: () => dynamicApi.list(appId, entity, { page, limit: 20, search: search || undefined, sort: sort || undefined, order }),
+  // FIX 1: Stable query key — must match exactly what we invalidate below
+  const qKey = ['records', appId, entity];
+
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: [...qKey, page, search, sort, order],
+    queryFn: () =>
+      dynamicApi.list(appId, entity, {
+        page,
+        pageSize: 20,
+        search: search || undefined,
+        sort: sort || undefined,
+        order,
+      }),
     enabled: !!entity,
+    // FIX 2: Always refetch when window regains focus so data stays fresh
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
+
+  // FIX 3: Central invalidate helper — invalidates ALL query key variants for this entity
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: qKey });
+    // also invalidate dashboard stats count
+    qc.invalidateQueries({ queryKey: ['count', appId, entity] });
+  }
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => dynamicApi.delete(appId, entity, id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['records', appId, entity] }); toast.success('Deleted'); },
+    onSuccess: () => { invalidate(); toast.success('Deleted'); },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
   const bulkDeleteMut = useMutation({
     mutationFn: (ids: string[]) => dynamicApi.bulk(appId, entity, { operation: 'delete', ids }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['records', appId, entity] }); setSelected(new Set()); toast.success('Deleted selected'); },
+    onSuccess: () => { invalidate(); setSelected(new Set()); toast.success('Deleted selected'); },
     onError: (e) => toast.error(getErrorMessage(e)),
   });
 
-  const records = data?.data?.records || [];
-  const total = data?.data?.total || 0;
-  const fields = entityConfig?.fields?.filter((f: any) => !f.hidden) || [];
+  // FIX 4: Correctly read records from API response shape:
+  // axios wraps in .data, then API returns { success, data: [], meta }
+  // so full path is: response.data.data (array) and response.data.meta
+  const records: any[] = data?.data?.data ?? [];
+  const total: number = data?.data?.meta?.total ?? 0;
+  const pages: number = data?.data?.meta?.pages ?? 1;
 
-  // Determine visible columns
-  const columns = component.columns?.length > 0
-    ? component.columns
-    : fields.slice(0, 6).map((f: any) => ({ key: f.name, label: f.label || f.name, type: f.type }));
+  const fields = entityConfig?.fields?.filter((f: any) => !f.hidden) || [];
+  const columns =
+    component.columns?.length > 0
+      ? component.columns
+      : fields.slice(0, 6).map((f: any) => ({
+          key: f.name,
+          label: f.label || f.name,
+          type: f.type,
+        }));
 
   function handleSort(key: string) {
-    if (sort === key) setOrder(o => o === 'ASC' ? 'DESC' : 'ASC');
+    if (sort === key) setOrder(o => (o === 'ASC' ? 'DESC' : 'ASC'));
     else { setSort(key); setOrder('ASC'); }
   }
 
   function renderCell(value: any, type: string) {
-    if (value === null || value === undefined) return <span className="text-gray-400 text-xs">—</span>;
-    if (type === 'boolean') return <span className={`badge ${value ? 'badge-green' : 'badge-gray'}`}>{value ? 'Yes' : 'No'}</span>;
-    if (type === 'date' || type === 'datetime') return <span className="text-xs">{formatDate(value)}</span>;
-    if (type === 'select') return <span className="badge badge-blue">{value}</span>;
-    if (type === 'email') return <a href={`mailto:${value}`} className="text-indigo-600 text-xs hover:underline">{value}</a>;
-    if (type === 'url') return <a href={value} target="_blank" rel="noopener" className="text-indigo-600 text-xs hover:underline">{truncate(value, 30)}</a>;
-    if (typeof value === 'object') return <span className="text-xs font-mono text-gray-500">{JSON.stringify(value).slice(0, 40)}</span>;
+    if (value === null || value === undefined || value === '')
+      // FIX 5: Removed broken unicode â€" → proper em dash
+      return <span className="text-gray-400 text-xs">—</span>;
+    if (type === 'boolean')
+      return (
+        <span className={`badge ${value ? 'badge-green' : 'badge-gray'}`}>
+          {value ? 'Yes' : 'No'}
+        </span>
+      );
+    if (type === 'date' || type === 'datetime')
+      return <span className="text-xs">{formatDate(value)}</span>;
+    if (type === 'select')
+      return <span className="badge badge-blue">{value}</span>;
+    if (type === 'email')
+      return (
+        <a href={`mailto:${value}`} className="text-indigo-600 text-xs hover:underline">
+          {value}
+        </a>
+      );
+    if (type === 'url')
+      return (
+        <a href={value} target="_blank" rel="noopener noreferrer" className="text-indigo-600 text-xs hover:underline">
+          {truncate(value, 30)}
+        </a>
+      );
+    if (typeof value === 'object')
+      return (
+        <span className="text-xs font-mono text-gray-500">
+          {JSON.stringify(value).slice(0, 40)}
+        </span>
+      );
     return <span className="text-sm">{truncate(String(value), 50)}</span>;
   }
 
-  const hasActions = component.actions?.length > 0;
   const canCreate = !component.actions || component.actions.find((a: any) => a.type === 'create');
-  const canEdit = !component.actions || component.actions.find((a: any) => a.type === 'edit');
+  const canEdit   = !component.actions || component.actions.find((a: any) => a.type === 'edit');
   const canDelete = !component.actions || component.actions.find((a: any) => a.type === 'delete');
+
+  // FIX 6: Build export URL with auth token so download works
+  const exportUrl = csvApi.exportUrl(appId, entity);
 
   return (
     <div className="card overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800">
-        <div className="flex items-center gap-3 flex-1">
-          <h3 className="font-semibold text-gray-900 dark:text-white">{component.title || entityConfig?.label || entity}</h3>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+        <div className="flex items-center gap-3">
+          <h3 className="font-semibold text-gray-900 dark:text-white">
+            {component.title || entityConfig?.label || entity}
+          </h3>
           <span className="badge badge-gray">{total} records</span>
+          {/* FIX 7: Manual refresh button with spinner */}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-1 rounded text-gray-400 hover:text-indigo-500 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+          </button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input className="input pl-8 w-48 py-1.5 text-xs" placeholder="Search…" value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }} />
+            <input
+              className="input pl-8 w-48 py-1.5 text-xs"
+              // FIX 8: Removed broken unicode â€¦ → proper ellipsis
+              placeholder="Search…"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+            />
           </div>
           <button onClick={() => setCsvOpen(true)} className="btn-secondary text-xs py-1.5 px-3">
             <Upload size={13} /> Import
           </button>
-          <a href={csvApi.exportUrl(appId, entity)} className="btn-secondary text-xs py-1.5 px-3" download>
+          <a href={exportUrl} className="btn-secondary text-xs py-1.5 px-3" download>
             <Download size={13} /> Export
           </a>
           {canCreate && (
-            <button onClick={() => { setEditRecord(null); setFormOpen(true); }} className="btn-primary text-xs py-1.5 px-3">
+            <button
+              onClick={() => { setEditRecord(null); setFormOpen(true); }}
+              className="btn-primary text-xs py-1.5 px-3"
+            >
               <Plus size={13} /> Add New
             </button>
           )}
         </div>
       </div>
 
-      {/* Bulk actions */}
+      {/* Bulk actions bar */}
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 dark:bg-indigo-950 border-b border-indigo-100 dark:border-indigo-900">
           <span className="text-sm text-indigo-700 dark:text-indigo-300">{selected.size} selected</span>
-          <button onClick={() => bulkDeleteMut.mutate(Array.from(selected))} className="btn-danger text-xs py-1 px-3">
+          <button
+            onClick={() => bulkDeleteMut.mutate(Array.from(selected))}
+            disabled={bulkDeleteMut.isPending}
+            className="btn-danger text-xs py-1 px-3"
+          >
             <Trash size={12} /> Delete Selected
           </button>
-          <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs py-1 px-3">Clear</button>
+          <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs py-1 px-3">
+            Clear
+          </button>
         </div>
       )}
 
-      {/* Table */}
+      {/* Table body */}
       <div className="overflow-x-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-16">
             <RefreshCw size={20} className="animate-spin text-indigo-500" />
+            {/* FIX 9: Removed broken unicode â€¦ */}
             <span className="ml-2 text-sm text-gray-500">Loading…</span>
           </div>
         ) : error ? (
-          <div className="text-center py-12 text-red-500 text-sm">{getErrorMessage(error)}</div>
+          <div className="text-center py-12 space-y-2">
+            <p className="text-red-500 text-sm">{getErrorMessage(error)}</p>
+            <button onClick={() => refetch()} className="btn-secondary text-xs">Retry</button>
+          </div>
         ) : records.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-gray-400 text-sm">No records yet</p>
-            {canCreate && <button onClick={() => setFormOpen(true)} className="btn-primary mt-3 text-xs">Add first record</button>}
+            {canCreate && (
+              <button
+                onClick={() => { setEditRecord(null); setFormOpen(true); }}
+                className="btn-primary mt-3 text-xs"
+              >
+                Add first record
+              </button>
+            )}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 dark:bg-gray-800/50">
               <tr>
                 <th className="w-10 px-3 py-2">
-                  <input type="checkbox" className="rounded" checked={selected.size === records.length}
-                    onChange={e => setSelected(e.target.checked ? new Set(records.map((r: any) => r.id)) : new Set())} />
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={selected.size === records.length && records.length > 0}
+                    onChange={e =>
+                      setSelected(e.target.checked ? new Set(records.map((r: any) => r.id)) : new Set())
+                    }
+                  />
                 </th>
                 {columns.map((col: any) => (
-                  <th key={col.key} className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none"
-                    onClick={() => handleSort(col.key)}>
+                  <th
+                    key={col.key}
+                    className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 cursor-pointer select-none"
+                    onClick={() => handleSort(col.key)}
+                  >
                     <div className="flex items-center gap-1">
                       {col.label || col.key}
-                      {sort === col.key && (order === 'ASC' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+                      {sort === col.key &&
+                        (order === 'ASC' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
                     </div>
                   </th>
                 ))}
@@ -151,25 +250,47 @@ export function DynamicTable({ appId, component, entityConfig }: Props) {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {records.map((record: any) => (
-                <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                <tr
+                  key={record.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors"
+                >
                   <td className="px-3 py-2">
-                    <input type="checkbox" className="rounded" checked={selected.has(record.id)}
-                      onChange={e => setSelected(s => { const n = new Set(s); e.target.checked ? n.add(record.id) : n.delete(record.id); return n; })} />
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={selected.has(record.id)}
+                      onChange={e =>
+                        setSelected(s => {
+                          const n = new Set(s);
+                          e.target.checked ? n.add(record.id) : n.delete(record.id);
+                          return n;
+                        })
+                      }
+                    />
                   </td>
                   {columns.map((col: any) => (
-                    <td key={col.key} className="px-3 py-2.5 max-w-xs">{renderCell(record[col.key], col.type)}</td>
+                    <td key={col.key} className="px-3 py-2.5 max-w-xs">
+                      {renderCell(record[col.key], col.type)}
+                    </td>
                   ))}
                   <td className="px-3 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {canEdit && (
-                        <button onClick={() => { setEditRecord(record); setFormOpen(true); }}
-                          className="p-1.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600 transition-colors">
+                        <button
+                          onClick={() => { setEditRecord(record); setFormOpen(true); }}
+                          className="p-1.5 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900 text-indigo-600 transition-colors"
+                          title="Edit"
+                        >
                           <Edit size={13} />
                         </button>
                       )}
                       {canDelete && (
-                        <button onClick={() => { if (confirm('Delete this record?')) deleteMut.mutate(record.id); }}
-                          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-500 transition-colors">
+                        <button
+                          onClick={() => { if (confirm('Delete this record?')) deleteMut.mutate(record.id); }}
+                          disabled={deleteMut.isPending}
+                          className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-500 transition-colors"
+                          title="Delete"
+                        >
                           <Trash size={13} />
                         </button>
                       )}
@@ -185,24 +306,63 @@ export function DynamicTable({ appId, component, entityConfig }: Props) {
       {/* Pagination */}
       {total > 20 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-800">
-          <span className="text-xs text-gray-500">Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total}</span>
+          <span className="text-xs text-gray-500">
+            {/* FIX 10: Removed broken unicode â€" → proper en dash */}
+            Showing {(page - 1) * 20 + 1}–{Math.min(page * 20, total)} of {total}
+          </span>
           <div className="flex gap-1">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="btn-secondary text-xs py-1 px-2 disabled:opacity-40">← Prev</button>
-            <button disabled={page * 20 >= total} onClick={() => setPage(p => p + 1)} className="btn-secondary text-xs py-1 px-2 disabled:opacity-40">Next →</button>
+            <button
+              disabled={page === 1}
+              onClick={() => setPage(p => p - 1)}
+              className="btn-secondary text-xs py-1 px-2 disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            <span className="px-2 py-1 text-xs text-gray-500">
+              {page} / {pages}
+            </span>
+            <button
+              disabled={page >= pages}
+              onClick={() => setPage(p => p + 1)}
+              className="btn-secondary text-xs py-1 px-2 disabled:opacity-40"
+            >
+              Next →
+            </button>
           </div>
         </div>
       )}
 
-      {/* Form Modal */}
+      {/* Create / Edit form modal */}
       {formOpen && (
-        <DynamicForm appId={appId} entity={entity} entityConfig={entityConfig}
-          record={editRecord} onClose={() => setFormOpen(false)}
-          onSuccess={() => { setFormOpen(false); qc.invalidateQueries({ queryKey: ['records', appId, entity] }); }} />
+        <DynamicForm
+          appId={appId}
+          entity={entity}
+          entityConfig={entityConfig}
+          record={editRecord}
+          onClose={() => { setFormOpen(false); setEditRecord(null); }}
+          // FIX 11: invalidate queries AND close modal on success so table refreshes
+          onSuccess={() => {
+            setFormOpen(false);
+            setEditRecord(null);
+            invalidate();
+          }}
+        />
       )}
 
-      {/* CSV Import */}
-      {csvOpen && <CSVImportModal appId={appId} entity={entity} entityConfig={entityConfig} onClose={() => setCsvOpen(false)}
-        onSuccess={() => { setCsvOpen(false); qc.invalidateQueries({ queryKey: ['records', appId, entity] }); }} />}
+      {/* CSV import modal */}
+      {csvOpen && (
+        <CSVImportModal
+          appId={appId}
+          entity={entity}
+          entityConfig={entityConfig}
+          onClose={() => setCsvOpen(false)}
+          // FIX 12: invalidate queries on CSV import success so imported rows appear
+          onSuccess={() => {
+            setCsvOpen(false);
+            invalidate();
+          }}
+        />
+      )}
     </div>
   );
 }

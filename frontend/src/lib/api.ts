@@ -56,18 +56,18 @@ export const dynamicApi = {
 
 // CSV
 export const csvApi = {
+  import: (appId: string, entity: string, file: File, mapping?: any) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (mapping) form.append('mapping', JSON.stringify(mapping));
+    return api.post(`/csv/import/${appId}/${entity}`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+  exportUrl: (appId: string, entity: string) => `${API_URL}/api/csv/export/${appId}/${entity}`,
   preview: (appId: string, file: File) => {
     const form = new FormData();
     form.append('file', file);
     return api.post(`/csv/${appId}/preview`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
-  import: (appId: string, entity: string, file: File, mapping?: any) => {
-    const form = new FormData();
-    form.append('file', file);
-    if (mapping) form.append('mapping', JSON.stringify(mapping));
-    return api.post(`/csv/${appId}/${entity}/import`, form, { headers: { 'Content-Type': 'multipart/form-data' } });
-  },
-  exportUrl: (appId: string, entity: string) => `${API_URL}/api/csv/${appId}/${entity}/export`,
   imports: (appId: string) => api.get(`/csv/${appId}/imports`),
 };
 

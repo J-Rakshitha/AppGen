@@ -108,7 +108,7 @@ export function DynamicTable({ appId, component, entityConfig }: Props) {
       {selected.size > 0 && (
         <div className="flex items-center gap-3 px-4 py-2 bg-indigo-50 dark:bg-indigo-950 border-b border-indigo-100 dark:border-indigo-900">
           <span className="text-sm text-indigo-700 dark:text-indigo-300">{selected.size} selected</span>
-          <button onClick={() => bulkDeleteMut.mutate([...selected])} className="btn-danger text-xs py-1 px-3">
+          <button onClick={() => bulkDeleteMut.mutate(Array.from(selected))} className="btn-danger text-xs py-1 px-3">
             <Trash size={12} /> Delete Selected
           </button>
           <button onClick={() => setSelected(new Set())} className="btn-ghost text-xs py-1 px-3">Clear</button>

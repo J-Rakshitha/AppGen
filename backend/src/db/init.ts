@@ -1,19 +1,25 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+
 dotenv.config();
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
 export async function initDatabase(): Promise<void> {
   try {
     await pool.query('SELECT 1');
-    console.log('✅ Database connected');
+    console.log('Database connected');
     await createTables();
   } catch (err) {
-    console.error('❌ Database connection failed:', err);
+    console.error('Database connection failed:', err);
     throw err;
   }
 }
@@ -61,7 +67,7 @@ async function createTables(): Promise<void> {
     CREATE TABLE IF NOT EXISTS notifications (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      app_id UUID REFERENCES apps(id) ON DELETE CASCADE,
+      app_id UUID REFERENCES apps(id) ON DELETE SET NULL,
       type VARCHAR(100) NOT NULL,
       title VARCHAR(255) NOT NULL,
       message TEXT,
@@ -87,4 +93,5 @@ async function createTables(): Promise<void> {
     )
   `);
 
-  console.log('✅ Tables ready');
+  console.log('Tables ready');
+}

@@ -9,6 +9,8 @@ export function errorHandler(
   console.error(err.stack);
   res.status(500).json({
     success: false,
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    error: process.env.NODE_ENV === 'production'
+      ? 'Internal server error'
+      : err.message,
   });
 }
